@@ -1,17 +1,19 @@
 import { Printer, ShoppingCart } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ProductThumb } from '@/components/ProductThumb';
 import { Receipt } from '@/components/Receipt';
 import { Badge, Button, EmptyState, ErrorNotice, Input, Modal, Spinner, cn } from '@/components/ui';
 import { api } from '@/lib/api';
 import { useCategories, useProducts } from '@/features/products/api';
 import { errorMessage, fmtQty } from '@/lib/format';
+import { groupProducts, type ProductGroup } from '@/lib/groups';
 import { useDebounced } from '@/lib/hooks';
 import { formatKes } from '@/lib/money';
 import type { Page, Product, Sale } from '@/lib/types';
 import { toast } from 'sonner';
 import { CartPanel } from '../components/CartPanel';
 import { CheckoutModal } from '../components/CheckoutModal';
+import { VariantPicker } from '../components/VariantPicker';
 import { cartTotals, useCartStore } from '../store/cart';
 
 export function PosPage() {
@@ -20,9 +22,13 @@ export function PosPage() {
   const [cartOpen, setCartOpen] = useState(false);
   const [paying, setPaying] = useState(false);
   const [done, setDone] = useState<Sale | null>(null);
+  const [openKey, setOpenKey] = useState<string | null>(null);
   const search = useDebounced(q.trim(), 250);
   const categories = useCategories();
-  const products = useProducts({ ...(search ? { q: search } : {}), ...(categoryId ? { categoryId } : {}), status: 'active', page: 1 }, 60);
+  const products = useProducts({ ...(search ? { q: search } : {}), ...(categoryId ? { categoryId } : {}), status: 'active', page: 1 }, search ? 60 : 200);
+  // Without a search the till shows one tile per product family; a family with several items opens a picker.
+  const groups = useMemo(() => groupProducts(products.data?.items ?? []), [products.data]);
+  const openGroup = openKey ? (groups.find((g) => g.key === openKey) ?? null) : null;
   const { lines, discountCents, add } = useCartStore();
   const t = cartTotals(lines, discountCents);
   const itemCount = lines.length;
@@ -75,25 +81,31 @@ export function PosPage() {
             ) : products.data.items.length === 0 ? (
               <EmptyState title="No products found" />
             ) : (
-              <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
-                {products.data.items.map((p) => {
-                  const out = p.quantity <= 0;
-                  return (
-                    <li key={p.id}>
-                      <button onClick={() => addProduct(p)} disabled={out} className="flex h-full min-h-24 w-full flex-col overflow-hidden rounded-lg border border-border text-left active:bg-muted disabled:opacity-50">
-                        <ProductThumb url={p.imageUrl} alt="" className="aspect-[4/3] w-full" />
-                        <span className="flex flex-1 flex-col justify-between gap-2 p-3">
-                          <span className="text-sm font-medium leading-snug">{p.name}</span>
-                          <span>
-                            <span className="block font-semibold tabular-nums">{formatKes(p.priceCents)}</span>
-                            <span className="text-xs text-muted-foreground">{out ? <Badge tone="danger">Out of stock</Badge> : p.lowStock ? <Badge tone="warning">{fmtQty(p.quantity)} {p.unit} left</Badge> : `${fmtQty(p.quantity)} ${p.unit}`}</span>
+              search ? (
+                <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
+                  {products.data.items.map((p) => {
+                    const out = p.quantity <= 0;
+                    return (
+                      <li key={p.id}>
+                        <button onClick={() => addProduct(p)} disabled={out} className="flex h-full min-h-24 w-full flex-col overflow-hidden rounded-lg border border-border text-left active:bg-muted disabled:opacity-50">
+                          <ProductThumb url={p.imageUrl} alt="" className="aspect-[4/3] w-full" />
+                          <span className="flex flex-1 flex-col justify-between gap-2 p-3">
+                            <span className="text-sm font-medium leading-snug">{p.name}</span>
+                            <span>
+                              <span className="block font-semibold tabular-nums">{formatKes(p.priceCents)}</span>
+                              <span className="text-xs text-muted-foreground">{out ? <Badge tone="danger">Out of stock</Badge> : p.lowStock ? <Badge tone="warning">{fmtQty(p.quantity)} {p.unit} left</Badge> : `${fmtQty(p.quantity)} ${p.unit}`}</span>
+                            </span>
                           </span>
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
+                  {groups.map((g) => <FamilyTile key={g.key} group={g} onOpen={() => (g.items.length === 1 ? addProduct(g.items[0]!) : setOpenKey(g.key))} />)}
+                </ul>
+              )
             )}
           </div>
         </section>
@@ -113,6 +125,7 @@ export function PosPage() {
         </div>
       )}
 
+      <VariantPicker group={openGroup} onPick={(p) => { addProduct(p); }} onClose={() => setOpenKey(null)} />
       <Modal open={cartOpen} onClose={() => setCartOpen(false)} title="Cart">{cartOpen && cart}</Modal>
       <CheckoutModal open={paying} onClose={() => setPaying(false)} onPaid={(s) => { setPaying(false); setDone(s); }} />
 
@@ -131,5 +144,27 @@ export function PosPage() {
         )}
       </Modal>
     </>
+  );
+}
+
+function FamilyTile({ group: g, onOpen }: { group: ProductGroup; onOpen: () => void }) {
+  const single = g.items.length === 1 ? g.items[0]! : null;
+  const out = single ? single.quantity <= 0 : g.totalQuantity <= 0;
+  const price = g.minPriceCents === g.maxPriceCents ? formatKes(g.minPriceCents) : `${formatKes(g.minPriceCents)} – ${formatKes(g.maxPriceCents)}`;
+  return (
+    <li>
+      <button onClick={onOpen} disabled={out} aria-label={single ? `Add ${single.name}` : `Open ${g.name}`} className="flex h-full min-h-24 w-full flex-col overflow-hidden rounded-lg border border-border text-left active:bg-muted disabled:opacity-50">
+        <ProductThumb url={g.imageUrl} alt="" className="aspect-[4/3] w-full" />
+        <span className="flex flex-1 flex-col justify-between gap-2 p-3">
+          <span className="text-sm font-medium leading-snug">{single ? single.name : g.name}</span>
+          <span>
+            <span className="block font-semibold tabular-nums">{price}</span>
+            <span className="text-xs text-muted-foreground">
+              {out ? <Badge tone="danger">Out of stock</Badge> : single ? (single.lowStock ? <Badge tone="warning">{fmtQty(single.quantity)} {single.unit} left</Badge> : `${fmtQty(single.quantity)} ${single.unit}`) : `${g.items.length} options · ${fmtQty(g.totalQuantity)} ${g.unit}`}
+            </span>
+          </span>
+        </span>
+      </button>
+    </li>
   );
 }
