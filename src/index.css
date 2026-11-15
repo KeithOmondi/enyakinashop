@@ -1,0 +1,47 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import './theme.css';
+
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    /* Stop pull-to-refresh / overscroll bounce from reloading the till mid-sale. */
+    overscroll-behavior: none;
+    /* Remove the 300ms tap delay and grey flash on touch devices. */
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Print only the receipt (Print button on a sale). */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm;
+  }
+}
+
+/* Slow drifting of the sign-in background shapes. Off for people who prefer reduced motion. */
+@keyframes auth-float {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -18px; }
+}
+.auth-float { animation: auth-float 9s ease-in-out infinite; }
+.auth-float-slow { animation: auth-float 14s ease-in-out infinite reverse; }
+@media (prefers-reduced-motion: reduce) {
+  .auth-float, .auth-float-slow { animation: none; }
+}
