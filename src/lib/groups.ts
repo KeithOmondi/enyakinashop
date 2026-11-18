@@ -62,3 +62,22 @@ export function groupProducts(products: Product[]): ProductGroup[] {
   }
   return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
+
+/** The part of a name after " - " ("Fries - Medium" -> "Medium"), or the whole name. */
+export function variantLabel(name: string): string {
+  const m = /\s-\s([^-]+)$/.exec(name);
+  return m ? m[1]!.trim() : name;
+}
+
+/**
+ * The name to show inside a family table, where the Point and Category columns already say
+ * the rest. If two items would look identical that way ("Fries - Medium" / "Fries - Large",
+ * both in Food), the full name is kept so they can be told apart.
+ */
+export function shortName(p: Product, siblings: Product[]): string {
+  const short = productGroupName(p.name);
+  const clash = siblings.some(
+    (o) => o.id !== p.id && productGroupName(o.name) === short && (pointOf(o.name) ?? 0) === (pointOf(p.name) ?? 0) && o.categoryId === p.categoryId,
+  );
+  return clash ? p.name : short;
+}

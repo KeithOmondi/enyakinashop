@@ -30,6 +30,8 @@ export interface AdjustPayload {
   mode: 'delta' | 'set';
   quantity: number;
   reason: string;
+  /** new_stock / cold_room are stock coming in; everything else is a plain correction. */
+  source?: 'adjustment' | 'new_stock' | 'cold_room';
 }
 
 export function useAdjustStock() {

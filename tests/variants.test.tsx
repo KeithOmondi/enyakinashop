@@ -38,3 +38,12 @@ describe('variant picker', () => {
     expect((screen.getByRole('button', { name: 'Add Tilapia Point 2 - Fresh' }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
+
+describe('variant picker with items that share a cell', () => {
+  it('shows each size of Fries on its own button', () => {
+    const fries = groupProducts([p('Fries - Medium', 'Food', 8500), p('Fries - Large', 'Food', 15000)])[0]!;
+    render(<VariantPicker group={fries} onPick={() => undefined} onClose={() => undefined} />);
+    expect(screen.getByRole('button', { name: 'Add Fries - Medium' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Add Fries - Large' })).toBeTruthy();
+  });
+});

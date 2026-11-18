@@ -76,7 +76,7 @@ export interface Movement {
   productId: string;
   productName: string;
   sku: string;
-  type: 'opening' | 'purchase' | 'sale' | 'void' | 'adjustment';
+  type: 'opening' | 'purchase' | 'sale' | 'void' | 'adjustment' | 'new_stock' | 'cold_room';
   quantity: number;
   balanceAfter: number;
   note: string | null;
